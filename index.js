@@ -16,6 +16,61 @@ const r = require('./responses')
 
 const PHONE = process.env.MY_PHONE_NUMBER
 
+// ── Message debounce buffer ───────────────────────────────────────────────────
+//
+// Problem: iMessage fires two Photon events when a message contains a URL —
+// first the text, then a "richlink" preview card with no text. This causes
+// Carl to process the same message twice (or process an empty follow-up).
+//
+// Fix: collect all events from the same sender within a 1.2s window, then
+// process them as one combined input. The richlink event has no text and no
+// audio, so it's naturally filtered out during the flush.
+
+const DEBOUNCE_MS = 5000
+const messageBuffer = new Map() // sender → { timer, text, audioAttachment }
+
+function bufferMessage(msg, sdk) {
+  const sender = msg.sender || PHONE
+  const text = msg.text?.trim() || ''
+  const audioAttachment = (msg.attachments || []).find((a) =>
+    a.isAudioAttachment?.() ||
+    a.mimeType?.startsWith('audio/') ||
+    /\.(caf|m4a|mp3|wav)$/i.test(a.path || '')
+  )
+
+  // Skip pure richlink events (no text, no audio — just a URL preview card)
+  if (!text && !audioAttachment) {
+    console.log(`[index] Skipped richlink/empty event from ${sender}`)
+    return
+  }
+
+  if (messageBuffer.has(sender)) {
+    const buf = messageBuffer.get(sender)
+    clearTimeout(buf.timer)
+    // Append any new text (space-separated); keep first audio if already set
+    if (text) buf.text = buf.text ? `${buf.text} ${text}` : text
+    if (audioAttachment && !buf.audioAttachment) buf.audioAttachment = audioAttachment
+    buf.timer = setTimeout(() => flushBuffer(sender, sdk), DEBOUNCE_MS)
+  } else {
+    const buf = { text, audioAttachment: audioAttachment || null, timer: null }
+    buf.timer = setTimeout(() => flushBuffer(sender, sdk), DEBOUNCE_MS)
+    messageBuffer.set(sender, buf)
+  }
+}
+
+function flushBuffer(sender, sdk) {
+  const buf = messageBuffer.get(sender)
+  messageBuffer.delete(sender)
+  if (!buf) return
+  // Construct a minimal message object handleMessage expects
+  const synthetic = {
+    sender,
+    text: buf.text,
+    attachments: buf.audioAttachment ? [buf.audioAttachment] : [],
+  }
+  handleMessage(synthetic, sdk)
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 async function main() {
@@ -29,7 +84,7 @@ async function main() {
   startScheduler(sdk)
 
   await sdk.startWatching({
-    onMessage: (msg) => handleMessage(msg, sdk),
+    onMessage: (msg) => bufferMessage(msg, sdk),
   })
 
   console.log('✅ Carl is running — watching for iMessages...')
@@ -67,14 +122,14 @@ async function handleMessage(msg, sdk) {
     if (!text) return  // empty message, ignore
 
     // ── 2. Onboarding ────────────────────────────────────────────────────────
-    if (!db.isOnboarded()) {
+    if (!db.isOnboarded(sender)) {
       await send(r.onboarding())
-      db.markOnboarded()
+      db.markOnboarded(sender)
       return
     }
 
     // ── 3. Multi-turn disambiguation ─────────────────────────────────────────
-    const pending = db.getPendingAction()
+    const pending = db.getPendingAction(sender)
     if (pending) {
       await handleDisambiguation(text, pending, sdk, sender)
       return
@@ -85,11 +140,11 @@ async function handleMessage(msg, sdk) {
 
     // ── 5. Route ─────────────────────────────────────────────────────────────
     switch (intent.intent) {
-      case 'bookmark':      await bookmarkFlow(intent, send); break
+      case 'bookmark':      await bookmarkFlow(intent, send, sender); break
       case 'reminder':      await reminderFlow(intent, send, sender); break
-      case 'query':         await queryFlow(intent, send); break
-      case 'list_all':      await listAllFlow(send); break
-      case 'delete':        await deleteFlow(intent, send); break
+      case 'query':         await queryFlow(intent, send, sender); break
+      case 'list_all':      await listAllFlow(send, sender); break
+      case 'delete':        await deleteFlow(intent, send, sender); break
       case 'conversational': await send(r.conversational(intent.reply)); break
       default:              await send(r.unknownIntent()); break
     }
@@ -102,7 +157,7 @@ async function handleMessage(msg, sdk) {
 
 // ── Intent flows ──────────────────────────────────────────────────────────────
 
-async function bookmarkFlow(intent, send) {
+async function bookmarkFlow(intent, send, sender) {
   const { item, context, entity_tags = [] } = intent
 
   if (!item) {
@@ -111,8 +166,8 @@ async function bookmarkFlow(intent, send) {
   }
 
   // Check for duplicate: same item text (case-insensitive) or overlapping tags
-  const tagMatches = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags) : []
-  const textMatches = db.searchBookmarks(item)
+  const tagMatches = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags, sender) : []
+  const textMatches = db.searchBookmarks(item, sender)
   const allMatches = _dedup([...tagMatches, ...textMatches])
   const duplicate = allMatches.find(
     (b) => b.item.toLowerCase() === item.toLowerCase()
@@ -126,17 +181,17 @@ async function bookmarkFlow(intent, send) {
       newItem: item,
       newContext: context || null,
       newTags: entity_tags,
-    })
+    }, sender)
     await send(r.duplicateFound(duplicate.item))
     return
   }
 
-  const id = db.addBookmark({ item, context, tags: entity_tags })
-  console.log(`[index] Bookmark #${id} added: "${item}"`)
+  const id = db.addBookmark({ sender, item, context, tags: entity_tags })
+  console.log(`[index] Bookmark #${id} added for ${sender}: "${item}"`)
 
   // Smart linking: find related bookmarks by tag (exclude the one we just saved)
   const linked = entity_tags.length > 0
-    ? db.searchByEntityTags(entity_tags).filter((b) => b.id !== id)
+    ? db.searchByEntityTags(entity_tags, sender).filter((b) => b.id !== id)
     : []
 
   await send(r.bookmarkConfirmed(item, context, linked))
@@ -147,14 +202,14 @@ async function reminderFlow(intent, send, sender = '') {
 
   // Vague reminder — no task provided
   if (!task || task.trim().length < 5) {
-    db.setPendingAction({ type: 'vague_reminder', sender })
+    db.setPendingAction({ type: 'vague_reminder' }, sender)
     await send(r.vagueReminderAsk())
     return
   }
 
   // Past reminder time
   if (remind_at && new Date(remind_at) < new Date()) {
-    db.setPendingAction({ type: 'past_reminder', task, urgency, entity_tags, sender })
+    db.setPendingAction({ type: 'past_reminder', task, urgency, entity_tags }, sender)
     await send(r.pastTimeAsk(task))
     return
   }
@@ -162,45 +217,45 @@ async function reminderFlow(intent, send, sender = '') {
   // Compute remind_at if not set (urgency defaults)
   const finalRemindAt = remind_at || _urgencyDefault(urgency)
 
-  const id = db.addReminder({ task, remind_at: finalRemindAt, urgency, entity_tags, sender })
-  console.log(`[index] Reminder #${id} added: "${task}" at ${finalRemindAt}`)
+  const id = db.addReminder({ sender, task, remind_at: finalRemindAt, urgency, entity_tags })
+  console.log(`[index] Reminder #${id} added for ${sender}: "${task}" at ${finalRemindAt}`)
 
   // Smart linking
-  const linked = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags) : []
+  const linked = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags, sender) : []
 
   await send(r.reminderConfirmed(task, finalRemindAt, urgency, linked))
 }
 
-async function queryFlow(intent, send) {
+async function queryFlow(intent, send, sender) {
   const query = intent.query || intent.task || ''
   if (!query) {
     await send(r.unknownIntent())
     return
   }
 
-  const bookmarks = db.searchBookmarks(query)
-  const reminders = db.searchReminders(query)
+  const bookmarks = db.searchBookmarks(query, sender)
+  const reminders = db.searchReminders(query, sender)
   await send(r.queryResults(bookmarks, reminders, query))
 }
 
-async function listAllFlow(send) {
-  const { bookmarks, reminders } = db.listAll()
+async function listAllFlow(send, sender) {
+  const { bookmarks, reminders } = db.listAll(sender)
   await send(r.formatListAll(bookmarks, reminders))
 }
 
-async function deleteFlow(intent, send) {
+async function deleteFlow(intent, send, sender) {
   const query = intent.query || intent.task || ''
   if (!query) {
     await send(r.unknownIntent())
     return
   }
 
-  const bookmarks = db.searchBookmarks(query).map((b) => ({
+  const bookmarks = db.searchBookmarks(query, sender).map((b) => ({
     id: b.id,
     kind: 'bookmark',
     description: b.item,
   }))
-  const reminders = db.searchReminders(query).map((rem) => ({
+  const reminders = db.searchReminders(query, sender).map((rem) => ({
     id: rem.id,
     kind: 'reminder',
     description: rem.task,
@@ -219,7 +274,7 @@ async function deleteFlow(intent, send) {
   }
 
   // Multiple matches — ask user to pick
-  db.setPendingAction({ type: 'delete_ambiguous', matches })
+  db.setPendingAction({ type: 'delete_ambiguous', matches }, sender)
   await send(r.disambiguateDelete(matches))
 }
 
@@ -237,7 +292,7 @@ async function handleDisambiguation(text, pending, sdk, sender) {
       if (!isNaN(num) && idx >= 0 && idx < pending.matches.length) {
         const match = pending.matches[idx]
         _deleteItem(match)
-        db.clearPendingAction()
+        db.clearPendingAction(sender)
         await send(r.deleteConfirmed(match.kind, match.description))
       } else {
         // Re-ask
@@ -253,16 +308,17 @@ async function handleDisambiguation(text, pending, sdk, sender) {
           context: pending.newContext,
           tags: pending.newTags,
         })
-        db.clearPendingAction()
+        db.clearPendingAction(sender)
         await send(r.duplicateUpdated(pending.newItem))
       } else if (lower.includes('new') || lower.includes('save') || lower.includes('no')) {
         const id = db.addBookmark({
+          sender,
           item: pending.newItem,
           context: pending.newContext,
           tags: pending.newTags,
         })
         console.log(`[index] New bookmark #${id} saved despite duplicate: "${pending.newItem}"`)
-        db.clearPendingAction()
+        db.clearPendingAction(sender)
         await send(r.bookmarkConfirmed(pending.newItem, pending.newContext))
       } else {
         await send(r.duplicateFound(pending.existingItem))
@@ -271,11 +327,10 @@ async function handleDisambiguation(text, pending, sdk, sender) {
     }
 
     case 'vague_reminder': {
-      // Re-classify with the clarification as a reminder
       const clarified = await classify(`Remind me to ${text}`)
-      db.clearPendingAction()
+      db.clearPendingAction(sender)
       if (clarified.intent === 'reminder' && clarified.task && clarified.task.length >= 5) {
-        await reminderFlow(clarified, send, pending.sender || sender)
+        await reminderFlow(clarified, send, sender)
       } else {
         await send(r.unknownIntent())
       }
@@ -286,17 +341,17 @@ async function handleDisambiguation(text, pending, sdk, sender) {
       if (/^(yes|yeah|yep|sure|ok|okay|yup)$/i.test(lower)) {
         const tomorrow8am = _nextMorning8am()
         const id = db.addReminder({
+          sender,
           task: pending.task,
           remind_at: tomorrow8am,
           urgency: pending.urgency,
           entity_tags: pending.entity_tags,
-          sender: pending.sender || sender,
         })
-        console.log(`[index] Rescheduled reminder #${id} to tomorrow 8am`)
-        db.clearPendingAction()
+        console.log(`[index] Rescheduled reminder #${id} to tomorrow 8am for ${sender}`)
+        db.clearPendingAction(sender)
         await send(r.reminderConfirmed(pending.task, tomorrow8am, pending.urgency))
       } else if (/^(no|nope|nah|cancel)$/i.test(lower)) {
-        db.clearPendingAction()
+        db.clearPendingAction(sender)
         await send(r.pastTimeCancelled())
       } else {
         await send(r.pastTimeAsk(pending.task))
@@ -305,7 +360,7 @@ async function handleDisambiguation(text, pending, sdk, sender) {
     }
 
     default:
-      db.clearPendingAction()
+      db.clearPendingAction(sender)
       break
   }
 }
