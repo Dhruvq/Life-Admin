@@ -17,7 +17,7 @@ iMessage .caf → ffmpeg → .mp3 → OpenAI Whisper → transcript → Minimax 
 ```
 MINIMAX_API_KEY=
 MINIMAX_BASE_URL=https://api.minimax.io
-MINIMAX_MODEL=MiniMax-Text-01
+MINIMAX_MODEL=MiniMax-M2
 OPENAI_API_KEY=
 MY_PHONE_NUMBER=+1XXXXXXXXXX
 ```
@@ -48,6 +48,7 @@ validate/       — pre-build risk checklist scripts
 ```
 
 ## Known Issues / Decisions Made
+- `MiniMax-M2` is a reasoning model — uses internal CoT tokens before writing JSON output. Set `max_completion_tokens: 2048` in `classifier.js` (not 512) or responses get cut off mid-JSON
 - Minimax STT does not exist — switched to OpenAI Whisper
 - iMessage voice memos are `.caf` (not `.m4a`) — ffmpeg required
 - `fluent-ffmpeg` npm package still needs to be installed before building `transcriber.js`
