@@ -1,0 +1,65 @@
+{
+  "messages": [
+    {
+      "id": "1",
+      "text": "Hello!",
+      "sender": "user",
+      "timestamp": "2026-03-27T10:00:00.000Z"
+    },
+    {
+      "id": "2",
+      "text": "Hi there!",
+      "sender": "agent",
+      "timestamp": "2026-03-27T10:00:05.000Z"
+    },
+    {
+      "text": "Another message!",
+      "sender": "user",
+      "timestamp": "2026-03-28T02:22:56.761Z",
+      "id": "_UM4eQl2gF8"
+    },
+    {
+      "text": "Hello, I need help with something.",
+      "sender": "user",
+      "id": "EEnJ6xSxdHY",
+      "timestamp": "2026-03-28T02:39:13.487Z"
+    },
+    {
+      "text": "Sure, how can I assist you today?",
+      "sender": "agent",
+      "id": "NKrIvQhde-0",
+      "timestamp": "2026-03-28T02:39:15.041Z"
+    },
+    {
+      "sender": "user",
+      "text": "Hello! How are you doing today?",
+      "timestamp": "2026-03-28T02:44:52.799Z",
+      "id": "4nvVsoQx5nk"
+    },
+    {
+      "sender": "user",
+      "text": "dih </3",
+      "timestamp": "2026-03-28T02:45:17.352Z",
+      "id": "7uSXoSAjoDw"
+    },
+    {
+      "sender": "user",
+      "text": "ong",
+      "timestamp": "2026-03-28T02:49:11.332Z",
+      "id": "AgZRk8WUlaI"
+    },
+    {
+      "sender": "user",
+      "text": "ojods",
+      "timestamp": "2026-03-28T02:49:22.357Z",
+      "id": "HksNFGhHsV8"
+    },
+    {
+      "sender": "user",
+      "text": "put it ong",
+      "timestamp": "2026-03-28T02:49:30.479Z",
+      "id": "7R0xple1X9M"
+    }
+  ],
+  "$schema": "./node_modules/json-server/schema.json"
+}
