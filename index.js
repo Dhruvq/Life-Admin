@@ -6,6 +6,7 @@
  */
 
 require('dotenv').config()
+const express = require('express')
 
 const { IMessageSDK } = require('@photon-ai/imessage-kit')
 const { transcribe } = require('./transcriber')
@@ -88,6 +89,36 @@ async function main() {
   })
 
   console.log('✅ Carl is running — watching for iMessages...')
+
+  // ── Dashboard API Server ───────────────────────────────────────────────────
+  const app = express()
+  app.use(express.json())
+
+  // Allow CORS so the local dashboard can call this API
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*')
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.header('Access-Control-Allow-Headers', 'Content-Type')
+    if (req.method === 'OPTIONS') return res.sendStatus(200)
+    next()
+  })
+
+  app.post('/api/send-welcome', async (req, res) => {
+    const { phoneNumber } = req.body
+    if (!phoneNumber) return res.status(400).json({ error: 'Phone number is required.' })
+
+    try {
+      console.log(`[API] Sending onboarding text to ${phoneNumber}`)
+      await sdk.send(phoneNumber, r.onboarding())
+      res.json({ success: true, message: 'Welcome text sent successfully.' })
+    } catch (error) {
+      console.error('[API] Failed to send welcome text:', error.message)
+      res.status(500).json({ error: 'Failed to send text.' })
+    }
+  })
+
+  const PORT = process.env.PORT || 3001
+  app.listen(PORT, () => console.log(`🌐 Dashboard API listening on port ${PORT}`))
 }
 
 // ── Message handler ───────────────────────────────────────────────────────────

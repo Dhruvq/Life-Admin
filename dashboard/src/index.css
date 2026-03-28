@@ -26,9 +26,6 @@ body {
   background: var(--bg-gradient);
   color: var(--text-primary);
   min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 code {
