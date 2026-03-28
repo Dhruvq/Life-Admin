@@ -1,17 +1,13 @@
 /**
  * db.js — SQLite database layer
  *
- * Design decisions made (from Pre-Build Risk Checklist items 6-8):
+ * Multi-user design: every bookmark, reminder, and settings key is scoped
+ * to a sender (phone number string). Each user sees only their own data.
  *
- * Item 6 (Multi-turn disambiguation): Uses a `pending_action` row in the settings table.
- *   When a delete/duplicate/vague case needs clarification, we store the pending context
- *   so the next incoming message is interpreted as a response, not a new command.
- *
- * Item 7 (Onboarding detection): Uses an `onboarded` flag in the settings table.
- *   Checked on every incoming message. Survives process restarts.
- *
- * Item 8 (Smart linking): Added searchByEntityTags(tags[]) function that finds bookmarks
- *   whose stored tags array shares any element with the provided tags.
+ * Design decisions (from Pre-Build Risk Checklist):
+ *   Item 6 — pending_action stored per-sender: key = "pending_action:<sender>"
+ *   Item 7 — onboarded flag stored per-sender: key = "onboarded:<sender>"
+ *   Item 8 — searchByEntityTags(tags, sender) for smart linking within a user's bookmarks
  */
 
 const Database = require('better-sqlite3')
@@ -20,7 +16,6 @@ const path = require('path')
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'life-admin.db')
 const db = new Database(DB_PATH)
 
-// Enable WAL mode for better concurrent read performance
 db.pragma('journal_mode = WAL')
 
 // ── Schema ─────────────────────────────────────────────────────────────────
@@ -28,83 +23,86 @@ db.pragma('journal_mode = WAL')
 db.exec(`
   CREATE TABLE IF NOT EXISTS bookmarks (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender     TEXT NOT NULL DEFAULT '',
     item       TEXT NOT NULL,
     context    TEXT,
-    tags       TEXT NOT NULL DEFAULT '[]',  -- JSON array of strings
+    tags       TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
   CREATE TABLE IF NOT EXISTS reminders (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender      TEXT NOT NULL DEFAULT '',
     task        TEXT NOT NULL,
-    remind_at   TEXT NOT NULL,             -- UTC ISO 8601 string
-    urgency     TEXT NOT NULL DEFAULT 'low', -- 'high' | 'medium' | 'low'
-    status      TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'sent' | 'cancelled'
-    entity_tags TEXT NOT NULL DEFAULT '[]', -- JSON array of strings (for smart linking)
+    remind_at   TEXT NOT NULL,
+    urgency     TEXT NOT NULL DEFAULT 'low',
+    status      TEXT NOT NULL DEFAULT 'pending',
+    entity_tags TEXT NOT NULL DEFAULT '[]',
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
-  -- Item 7: Onboarding flag + Item 6: pending disambiguation state
+  -- Settings: arbitrary key/value, keys are namespaced per-sender where needed
+  -- e.g. "onboarded:<phone>", "pending_action:<phone>"
   CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
 `)
 
-// Seed onboarded = false if not set
-const onboardedRow = db.prepare("SELECT value FROM settings WHERE key = 'onboarded'").get()
-if (!onboardedRow) {
-  db.prepare("INSERT INTO settings (key, value) VALUES ('onboarded', 'false')").run()
-}
+// ── Migrations for existing databases ─────────────────────────────────────
 
-// ── Onboarding (Item 7) ───────────────────────────────────────────────────
+try { db.exec("ALTER TABLE bookmarks ADD COLUMN sender TEXT NOT NULL DEFAULT ''") } catch {}
+try { db.exec("ALTER TABLE reminders ADD COLUMN sender TEXT NOT NULL DEFAULT ''") } catch {}
 
-function isOnboarded() {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'onboarded'").get()
+// ── Onboarding (per-sender) ────────────────────────────────────────────────
+
+function isOnboarded(sender) {
+  const key = `onboarded:${sender}`
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
   return row?.value === 'true'
 }
 
-function markOnboarded() {
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('onboarded', 'true')").run()
+function markOnboarded(sender) {
+  const key = `onboarded:${sender}`
+  db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, 'true')
 }
 
-// ── Pending Action / Multi-turn Disambiguation (Item 6) ───────────────────
+// ── Pending Action / Multi-turn Disambiguation (per-sender) ───────────────
 //
 // Shape of pending_action value (JSON string):
 // {
-//   type: 'delete_ambiguous' | 'duplicate_bookmark' | 'vague_reminder',
-//   matches: [{ id, description }],   // for delete_ambiguous
-//   item: string,                     // for duplicate_bookmark
-//   bookmarkId: number,               // for duplicate_bookmark
+//   type: 'delete_ambiguous' | 'duplicate_bookmark' | 'vague_reminder' | 'past_reminder',
+//   matches: [{ id, kind, description }],  // delete_ambiguous
+//   existingId, existingItem, newItem, newContext, newTags,  // duplicate_bookmark
+//   task, urgency, entity_tags,            // past_reminder / vague_reminder
+//   sender: string,
 // }
 
-function getPendingAction() {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'pending_action'").get()
+function getPendingAction(sender) {
+  const key = `pending_action:${sender}`
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
   if (!row) return null
-  try {
-    return JSON.parse(row.value)
-  } catch {
-    return null
-  }
+  try { return JSON.parse(row.value) } catch { return null }
 }
 
-function setPendingAction(action) {
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('pending_action', ?)").run(
-    JSON.stringify(action)
+function setPendingAction(action, sender) {
+  const key = `pending_action:${sender}`
+  db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(
+    key, JSON.stringify(action)
   )
 }
 
-function clearPendingAction() {
-  db.prepare("DELETE FROM settings WHERE key = 'pending_action'").run()
+function clearPendingAction(sender) {
+  const key = `pending_action:${sender}`
+  db.prepare('DELETE FROM settings WHERE key = ?').run(key)
 }
 
-// ── Bookmarks ─────────────────────────────────────────────────────────────
+// ── Bookmarks (per-sender) ─────────────────────────────────────────────────
 
-function addBookmark({ item, context, tags = [] }) {
-  const stmt = db.prepare(
-    'INSERT INTO bookmarks (item, context, tags) VALUES (?, ?, ?)'
-  )
-  const result = stmt.run(item, context ?? null, JSON.stringify(tags))
+function addBookmark({ sender = '', item, context, tags = [] }) {
+  const result = db.prepare(
+    'INSERT INTO bookmarks (sender, item, context, tags) VALUES (?, ?, ?, ?)'
+  ).run(sender, item, context ?? null, JSON.stringify(tags))
   return result.lastInsertRowid
 }
 
@@ -119,45 +117,39 @@ function updateBookmark(id, { item, context, tags }) {
 }
 
 function deleteBookmark(id) {
-  db.prepare('UPDATE bookmarks SET id = id WHERE id = ?').run(id)  // noop to confirm exists
   db.prepare('DELETE FROM bookmarks WHERE id = ?').run(id)
 }
 
-function searchBookmarks(query) {
+function searchBookmarks(query, sender) {
   const pattern = `%${query}%`
   return db.prepare(
-    'SELECT * FROM bookmarks WHERE item LIKE ? OR context LIKE ? OR tags LIKE ? ORDER BY created_at DESC'
-  ).all(pattern, pattern, pattern)
+    `SELECT * FROM bookmarks
+     WHERE sender = ? AND (item LIKE ? OR context LIKE ? OR tags LIKE ?)
+     ORDER BY created_at DESC`
+  ).all(sender, pattern, pattern, pattern)
 }
 
-// Item 8: Search bookmarks by entity tag overlap
-function searchByEntityTags(tags) {
+// Item 8: Search bookmarks by entity tag overlap, scoped to sender
+function searchByEntityTags(tags, sender) {
   if (!tags || tags.length === 0) return []
-
-  // SQLite doesn't have native JSON array intersection, so we query all bookmarks
-  // and filter in JS. For a hackathon single-user DB this is fine.
-  const allBookmarks = db.prepare('SELECT * FROM bookmarks ORDER BY created_at DESC').all()
-
-  return allBookmarks.filter((bookmark) => {
-    try {
-      const bookmarkTags = JSON.parse(bookmark.tags)
-      return tags.some((tag) => bookmarkTags.includes(tag))
-    } catch {
-      return false
-    }
+  const allBookmarks = db.prepare(
+    'SELECT * FROM bookmarks WHERE sender = ? ORDER BY created_at DESC'
+  ).all(sender)
+  return allBookmarks.filter((b) => {
+    try { return JSON.parse(b.tags).some((t) => tags.includes(t)) } catch { return false }
   })
 }
 
-// ── Reminders ─────────────────────────────────────────────────────────────
+// ── Reminders (per-sender) ─────────────────────────────────────────────────
 
-function addReminder({ task, remind_at, urgency = 'low', entity_tags = [] }) {
-  const stmt = db.prepare(
-    'INSERT INTO reminders (task, remind_at, urgency, entity_tags) VALUES (?, ?, ?, ?)'
-  )
-  const result = stmt.run(task, remind_at, urgency, JSON.stringify(entity_tags))
+function addReminder({ sender = '', task, remind_at, urgency = 'low', entity_tags = [] }) {
+  const result = db.prepare(
+    'INSERT INTO reminders (sender, task, remind_at, urgency, entity_tags) VALUES (?, ?, ?, ?, ?)'
+  ).run(sender, task, remind_at, urgency, JSON.stringify(entity_tags))
   return result.lastInsertRowid
 }
 
+// Scheduler uses this — returns ALL due reminders across all senders
 function getPendingReminders() {
   const nowISO = new Date().toISOString()
   return db.prepare(
@@ -173,54 +165,55 @@ function cancelReminder(id) {
   db.prepare("UPDATE reminders SET status = 'cancelled' WHERE id = ?").run(id)
 }
 
-function searchReminders(query) {
-  const pattern = `%${query}%`
-  return db.prepare(
-    "SELECT * FROM reminders WHERE (task LIKE ? OR entity_tags LIKE ?) AND status = 'pending' ORDER BY remind_at ASC"
-  ).all(pattern, pattern)
+function deleteAllBookmarks(sender) {
+  return db.prepare('DELETE FROM bookmarks WHERE sender = ?').run(sender).changes
 }
 
-// ── List All ──────────────────────────────────────────────────────────────
+function deleteAllReminders(sender) {
+  return db.prepare("UPDATE reminders SET status = 'cancelled' WHERE sender = ? AND status = 'pending'").run(sender).changes
+}
 
-function listAll() {
+function searchReminders(query, sender) {
+  const pattern = `%${query}%`
+  return db.prepare(
+    `SELECT * FROM reminders
+     WHERE sender = ? AND (task LIKE ? OR entity_tags LIKE ?) AND status = 'pending'
+     ORDER BY remind_at ASC`
+  ).all(sender, pattern, pattern)
+}
+
+// ── List All (per-sender) ──────────────────────────────────────────────────
+
+function listAll(sender) {
   const bookmarks = db.prepare(
-    'SELECT * FROM bookmarks ORDER BY created_at DESC'
-  ).all()
-
+    'SELECT * FROM bookmarks WHERE sender = ? ORDER BY created_at DESC'
+  ).all(sender)
   const reminders = db.prepare(
-    "SELECT * FROM reminders WHERE status = 'pending' ORDER BY remind_at ASC"
-  ).all()
-
+    "SELECT * FROM reminders WHERE sender = ? AND status = 'pending' ORDER BY remind_at ASC"
+  ).all(sender)
   return { bookmarks, reminders }
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────
 
 module.exports = {
-  // Onboarding (Item 7)
   isOnboarded,
   markOnboarded,
-
-  // Pending action / multi-turn state (Item 6)
   getPendingAction,
   setPendingAction,
   clearPendingAction,
-
-  // Bookmarks
   addBookmark,
   getBookmarkById,
   updateBookmark,
   deleteBookmark,
+  deleteAllBookmarks,
   searchBookmarks,
-  searchByEntityTags,  // Item 8
-
-  // Reminders
+  searchByEntityTags,
   addReminder,
   getPendingReminders,
   markReminderSent,
   cancelReminder,
+  deleteAllReminders,
   searchReminders,
-
-  // General
   listAll,
 }

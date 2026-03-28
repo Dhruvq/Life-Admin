@@ -22,6 +22,13 @@ OPENAI_API_KEY=
 MY_PHONE_NUMBER=+1XXXXXXXXXX
 ```
 
+## How the routing actually works:
+
+Photon monitors ALL messages arriving on this Mac (via iMessage sync)
+Anyone can text your Mac's Apple ID / phone number
+Carl picks it up and should respond back to that person (msg.sender)
+MY_PHONE_NUMBER in .env is only for proactive scheduler reminders (Carl initiating contact)
+
 ## Validations
 | # | What | Run | Status |
 |---|------|-----|--------|
