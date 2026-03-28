@@ -25,7 +25,7 @@ async function run() {
   const result = await sdk.getMessages({ hasAttachments: true, limit: 20 })
 
   const voiceMemos = result.messages.filter((msg) =>
-    msg.attachments.some((a) => isAudioAttachment(a) || a.mimeType?.includes('audio') || a.filename?.endsWith('.m4a'))
+    msg.attachments.some((a) => isAudioAttachment(a) || a.mimeType?.includes('audio') || a.filename?.endsWith('.m4a') || a.filename?.endsWith('.caf'))
   )
 
   if (voiceMemos.length === 0) {
@@ -37,7 +37,7 @@ async function run() {
     await sdk.startWatching({
       onMessage: (msg) => {
         const audioAttachments = msg.attachments.filter(
-          (a) => isAudioAttachment(a) || a.mimeType?.includes('audio') || a.filename?.endsWith('.m4a')
+          (a) => isAudioAttachment(a) || a.mimeType?.includes('audio') || a.filename?.endsWith('.m4a') || a.filename?.endsWith('.caf')
         )
         if (audioAttachments.length > 0) {
           checkAudioAttachment(audioAttachments[0])
@@ -54,7 +54,7 @@ async function run() {
   // Check the most recent voice memo
   const latestVoiceMemo = voiceMemos[0]
   const audioAttachment = latestVoiceMemo.attachments.find(
-    (a) => isAudioAttachment(a) || a.mimeType?.includes('audio') || a.filename?.endsWith('.m4a')
+    (a) => isAudioAttachment(a) || a.mimeType?.includes('audio') || a.filename?.endsWith('.m4a') || a.filename?.endsWith('.caf')
   )
 
   checkAudioAttachment(audioAttachment)
@@ -72,7 +72,9 @@ function checkAudioAttachment(attachment) {
   if (exists) {
     const stat = fs.statSync(attachment.path)
     console.log('\n✅ File exists on disk:', stat.size, 'bytes')
-    console.log('\n✅ Validation 2 PASSED — Photon exposes voice memo as readable .m4a file path.')
+    console.log('\n✅ Validation 2 PASSED — Photon exposes voice memo as readable audio file path.')
+    console.log(`   Note: iMessage voice memos are .caf (Core Audio Format), not .m4a.`)
+    console.log(`   Minimax STT likely requires transcoding: .caf → .mp3 (see Validation 3).`)
     console.log('   Next step: pass attachment.path to Minimax STT (Validation 3).')
   } else {
     console.error('\n❌ Validation 2 FAILED — attachment.path does not exist on disk:', attachment.path)

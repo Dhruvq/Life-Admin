@@ -26,7 +26,7 @@ Life Admin Agent — MVP Project Specification
  
  
  Voice Memo Input 
- Users can send a voice memo in iMessage instead of typing. The audio is transcribed via Minimax Speech-to-Text, then the transcript is processed through the same intent classification pipeline as text. This makes the interaction feel native to how people already use iMessage. 
+ Users can send a voice memo in iMessage instead of typing. The audio is transcribed via OpenAI Whisper (after ffmpeg transcodes .caf → .mp3), then the transcript is processed through the same intent classification pipeline as text. This makes the interaction feel native to how people already use iMessage. 
  Smart Linking (Bookmarks ↔ Reminders) 
  When a reminder is created, the agent searches existing bookmarks for overlapping entity tags. If a match is found, the reminder confirmation references the related bookmark. Example: User previously bookmarked "Keurig Espresso machine for mom's birthday." Later says "Remind me to get mom's birthday gift on Friday." The agent responds: "I'll remind you to get mom's birthday gift on Friday — you saved a Keurig Espresso machine for that." 
  Urgency Detection 
@@ -65,17 +65,17 @@ Life Admin Agent — MVP Project Specification
  responses.js — All response formatting and copy in one place 
  
  
- Minimax API Usage 
- Minimax Speech-to-Text 
- Core to the voice memo pipeline. Every audio message is transcribed before processing. Without it, the voice memo feature doesn't exist. 
- Minimax Text 
- Does all of the following in a single API call per message: 
- Intent classification (bookmark / reminder / query / list_all / delete / conversational) 
- Natural language time parsing (converts "in 10 days" or "tomorrow at 6pm" to ISO datetime) 
- Urgency detection (high / medium / low based on language) 
- Entity tag extraction (normalized keywords like "mom", "birthday", "gym" for smart linking) 
- Conversational reply generation (for non-command messages) 
- The classification prompt receives the current datetime and the user's message, and returns structured JSON. 
+ API Usage
+ OpenAI Whisper (Speech-to-Text)
+ Core to the voice memo pipeline. iMessage delivers voice memos as .caf files. ffmpeg transcodes .caf → .mp3, then the file is sent to OpenAI Whisper (whisper-1) which returns a transcript. That transcript flows into the same intent classification pipeline as typed messages. Note: Minimax does not offer a public STT API — confirmed 404 on all plausible endpoints.
+ Minimax Text
+ Does all of the following in a single API call per message:
+ Intent classification (bookmark / reminder / query / list_all / delete / conversational)
+ Natural language time parsing (converts "in 10 days" or "tomorrow at 6pm" to ISO datetime)
+ Urgency detection (high / medium / low based on language)
+ Entity tag extraction (normalized keywords like "mom", "birthday", "gym" for smart linking)
+ Conversational reply generation (for non-command messages)
+ The classification prompt receives the current datetime and the user's message, and returns structured JSON.
  
  
  Response Templates & UX 
@@ -135,8 +135,8 @@ Life Admin Agent — MVP Project Specification
  Full CRUD lifecycle — create bookmarks/reminders, query, list all, delete. Voice input. Proactive reminders. Smart linking. Error handling. Onboarding. 
  Use of TRAE AI (20%) 
  Entire project built in TRAE. Commit history reflects iterative TRAE-assisted development. Documented in submission description. 
- Use of Minimax (20%) 
- Two APIs deeply integrated. Speech-to-Text is core to voice pipeline. Text API handles classification, time parsing, urgency, entity extraction, smart linking, and conversation — all in one call. 
+ Use of Minimax (20%)
+ Minimax Text API is deeply integrated as the single brain for the agent: intent classification, time parsing, urgency detection, entity extraction, smart linking, and conversational replies — all in one prompt call. Voice transcription uses OpenAI Whisper (Minimax has no public STT API).
  Innovation & Creativity (20%) 
  Smart linking between bookmarks and reminders. Urgency detection from natural language. Voice-memo-native iMessage experience. Agent initiates contact (proactive reminders). 
  Presentation Quality (15%) 

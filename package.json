@@ -26,6 +26,7 @@
   "dependencies": {
     "@photon-ai/imessage-kit": "^2.1.2",
     "better-sqlite3": "^12.8.0",
-    "dotenv": "^17.3.1"
+    "dotenv": "^17.3.1",
+    "openai": "^6.33.0"
   }
 }
