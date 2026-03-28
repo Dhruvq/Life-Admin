@@ -1,0 +1,31 @@
+{
+  "name": "life-admin",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "validate": "node validate/run-all.js",
+    "validate:all": "node validate/run-all.js --interactive",
+    "validate:1": "node validate/01-photon-hello-world.js",
+    "validate:2": "node validate/02-photon-voice-memo.js",
+    "validate:3": "node validate/03-minimax-stt.js",
+    "validate:4": "node validate/04-minimax-classification.js",
+    "validate:5": "node validate/05-timezone.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dhruvq/Life-Admin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Dhruvq/Life-Admin/issues"
+  },
+  "homepage": "https://github.com/Dhruvq/Life-Admin#readme",
+  "description": "",
+  "dependencies": {
+    "@photon-ai/imessage-kit": "^2.1.2",
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^17.3.1"
+  }
+}
