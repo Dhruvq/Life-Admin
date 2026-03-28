@@ -39,7 +39,7 @@ Life Admin Agent — MVP Project Specification
  Runtime:  Node.js (required by Photon SDK) 
  Framework:  Express or plain Node 
  Database:  SQLite via better-sqlite3 
- APIs:  Minimax Speech-to-Text, Minimax Text 
+ APIs:  OpenAI Whisper (STT), Minimax Text (model: MiniMax-M2) 
  Messaging:  Photon SDK (iMessage) 
  Dev Environment:  TRAE AI 
  Message Flow 

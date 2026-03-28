@@ -10,17 +10,26 @@
  * Run: node validate/04-minimax-classification.js
  */
 
-require('dotenv').config()
+const path = require('path')
+require('dotenv').config({ path: path.join(__dirname, '../.env') })
 const https = require('https')
 
 const API_KEY = process.env.MINIMAX_API_KEY
+const GROUP_ID = process.env.MINIMAX_GROUP_ID  // optional for api.minimax.io
 const BASE_URL = process.env.MINIMAX_BASE_URL || 'https://api.minimax.io'
-const MODEL = process.env.MINIMAX_MODEL || 'MiniMax-Text-01'
+const MODEL = process.env.MINIMAX_MODEL || 'MiniMax-M2'
 
 if (!API_KEY) {
-  console.error('❌ MINIMAX_API_KEY not set. Add it to .env')
+  console.error('❌ MINIMAX_API_KEY not set in Life-Admin/.env')
   process.exit(1)
 }
+
+// Debug: confirm what's loaded (masked)
+console.log(`   API_KEY: ${API_KEY.slice(0, 6)}...${API_KEY.slice(-4)}`)
+console.log(`   BASE_URL: ${BASE_URL}`)
+console.log(`   MODEL: ${MODEL}`)
+console.log(`   GROUP_ID: ${GROUP_ID ? GROUP_ID.slice(0, 4) + '...' : '(not set)'}`)
+console.log()
 
 // The exact system prompt that will be used in production
 const SYSTEM_PROMPT = `You are an intent classifier for a personal iMessage assistant.
@@ -88,12 +97,16 @@ function callMinimax(userMessage) {
       { role: 'user', content: userMessage },
     ],
     temperature: 0.1,  // low temp for consistent structured output
-    max_completion_tokens: 512,
+    max_completion_tokens: 2048,  // MiniMax-M2 is a reasoning model — uses tokens for CoT before JSON output
     stream: false,
   })
 
   return new Promise((resolve, reject) => {
-    const urlObj = new URL(`${BASE_URL}/v1/text/chatcompletion_v2`)
+    // GroupId is required for api.minimax.chat but NOT for api.minimax.io
+    const url = GROUP_ID
+      ? `${BASE_URL}/v1/text/chatcompletion_v2?GroupId=${GROUP_ID}`
+      : `${BASE_URL}/v1/text/chatcompletion_v2`
+    const urlObj = new URL(url)
     const req = https.request(urlObj, {
       method: 'POST',
       headers: {
