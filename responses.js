@@ -177,6 +177,12 @@ function formatListAll(bookmarks, reminders) {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 
+function clearAllConfirmed(target, count) {
+  if (target === 'bookmarks') return `✅ Cleared ${count} bookmark${count === 1 ? '' : 's'}.`
+  if (target === 'reminders') return `✅ Cancelled ${count} reminder${count === 1 ? '' : 's'}.`
+  return `✅ Cleared everything — ${count.bookmarks} bookmark${count.bookmarks === 1 ? '' : 's'} and ${count.reminders} reminder${count.reminders === 1 ? '' : 's'}.`
+}
+
 function deleteConfirmed(kind, description) {
   const label = kind === 'reminder' ? 'reminder' : 'bookmark'
   return `✅ Removed your ${label} — ${description}`
@@ -244,6 +250,7 @@ module.exports = {
   pastTimeCancelled,
   queryResults,
   formatListAll,
+  clearAllConfirmed,
   deleteConfirmed,
   disambiguateDelete,
   noResults,

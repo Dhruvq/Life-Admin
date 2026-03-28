@@ -176,6 +176,7 @@ async function handleMessage(msg, sdk) {
       case 'query':         await queryFlow(intent, send, sender); break
       case 'list_all':      await listAllFlow(send, sender); break
       case 'delete':        await deleteFlow(intent, send, sender); break
+      case 'clear_all':     await clearAllFlow(intent, send, sender); break
       case 'conversational': await send(r.conversational(intent.reply)); break
       default:              await send(r.unknownIntent()); break
     }
@@ -307,6 +308,22 @@ async function deleteFlow(intent, send, sender) {
   // Multiple matches — ask user to pick
   db.setPendingAction({ type: 'delete_ambiguous', matches }, sender)
   await send(r.disambiguateDelete(matches))
+}
+
+async function clearAllFlow(intent, send, sender) {
+  const target = intent.clear_target || 'all'
+
+  if (target === 'bookmarks') {
+    const count = db.deleteAllBookmarks(sender)
+    await send(r.clearAllConfirmed('bookmarks', count))
+  } else if (target === 'reminders') {
+    const count = db.deleteAllReminders(sender)
+    await send(r.clearAllConfirmed('reminders', count))
+  } else {
+    const bCount = db.deleteAllBookmarks(sender)
+    const rCount = db.deleteAllReminders(sender)
+    await send(r.clearAllConfirmed('all', { bookmarks: bCount, reminders: rCount }))
+  }
 }
 
 // ── Disambiguation handler ────────────────────────────────────────────────────
