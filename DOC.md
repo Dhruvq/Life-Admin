@@ -1,5 +1,12 @@
 # Life Admin — Working Docs
 
+## How the routing actually works:
+
+Photon monitors ALL messages arriving on this Mac (via iMessage sync)
+Anyone can text your Mac's Apple ID / phone number
+Carl picks it up and should respond back to that person (msg.sender)
+MY_PHONE_NUMBER in .env is only for proactive scheduler reminders (Carl initiating contact)
+
 ## Stack
 - **Runtime**: Node.js (CommonJS)
 - **iMessage**: `@photon-ai/imessage-kit` — Full Disk Access required (no SIP changes needed)
