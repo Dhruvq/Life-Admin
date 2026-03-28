@@ -27,6 +27,8 @@ db.exec(`
     item       TEXT NOT NULL,
     context    TEXT,
     tags       TEXT NOT NULL DEFAULT '[]',
+    link_url   TEXT,
+    link_title TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
@@ -38,6 +40,8 @@ db.exec(`
     urgency     TEXT NOT NULL DEFAULT 'low',
     status      TEXT NOT NULL DEFAULT 'pending',
     entity_tags TEXT NOT NULL DEFAULT '[]',
+    link_url    TEXT,
+    link_title  TEXT,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
@@ -53,6 +57,10 @@ db.exec(`
 
 try { db.exec("ALTER TABLE bookmarks ADD COLUMN sender TEXT NOT NULL DEFAULT ''") } catch {}
 try { db.exec("ALTER TABLE reminders ADD COLUMN sender TEXT NOT NULL DEFAULT ''") } catch {}
+try { db.exec("ALTER TABLE bookmarks ADD COLUMN link_url TEXT") } catch {}
+try { db.exec("ALTER TABLE bookmarks ADD COLUMN link_title TEXT") } catch {}
+try { db.exec("ALTER TABLE reminders ADD COLUMN link_url TEXT") } catch {}
+try { db.exec("ALTER TABLE reminders ADD COLUMN link_title TEXT") } catch {}
 
 // ── Onboarding (per-sender) ────────────────────────────────────────────────
 
@@ -99,10 +107,10 @@ function clearPendingAction(sender) {
 
 // ── Bookmarks (per-sender) ─────────────────────────────────────────────────
 
-function addBookmark({ sender = '', item, context, tags = [] }) {
+function addBookmark({ sender = '', item, context, tags = [], link_url = null, link_title = null }) {
   const result = db.prepare(
-    'INSERT INTO bookmarks (sender, item, context, tags) VALUES (?, ?, ?, ?)'
-  ).run(sender, item, context ?? null, JSON.stringify(tags))
+    'INSERT INTO bookmarks (sender, item, context, tags, link_url, link_title) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(sender, item, context ?? null, JSON.stringify(tags), link_url, link_title)
   return result.lastInsertRowid
 }
 
@@ -110,10 +118,10 @@ function getBookmarkById(id) {
   return db.prepare('SELECT * FROM bookmarks WHERE id = ?').get(id)
 }
 
-function updateBookmark(id, { item, context, tags }) {
+function updateBookmark(id, { item, context, tags, link_url = null, link_title = null }) {
   db.prepare(
-    'UPDATE bookmarks SET item = ?, context = ?, tags = ? WHERE id = ?'
-  ).run(item, context ?? null, JSON.stringify(tags), id)
+    'UPDATE bookmarks SET item = ?, context = ?, tags = ?, link_url = ?, link_title = ? WHERE id = ?'
+  ).run(item, context ?? null, JSON.stringify(tags), link_url, link_title, id)
 }
 
 function deleteBookmark(id) {
@@ -142,10 +150,10 @@ function searchByEntityTags(tags, sender) {
 
 // ── Reminders (per-sender) ─────────────────────────────────────────────────
 
-function addReminder({ sender = '', task, remind_at, urgency = 'low', entity_tags = [] }) {
+function addReminder({ sender = '', task, remind_at, urgency = 'low', entity_tags = [], link_url = null, link_title = null }) {
   const result = db.prepare(
-    'INSERT INTO reminders (sender, task, remind_at, urgency, entity_tags) VALUES (?, ?, ?, ?, ?)'
-  ).run(sender, task, remind_at, urgency, JSON.stringify(entity_tags))
+    'INSERT INTO reminders (sender, task, remind_at, urgency, entity_tags, link_url, link_title) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(sender, task, remind_at, urgency, JSON.stringify(entity_tags), link_url, link_title)
   return result.lastInsertRowid
 }
 

@@ -57,9 +57,14 @@ function onboarding() {
  * @param {string|null} context
  * @param {Array} linked — related bookmarks found via entity tag overlap
  */
-function bookmarkConfirmed(item, context, linked = []) {
-  let msg = `📌 Bookmarked — ${item}`
-  if (context) msg += ` (${context})`
+function bookmarkConfirmed(item, context, linked = [], linkUrl = null, linkTitle = null) {
+  let displayItem = item
+  if (linkUrl) {
+    const label = linkTitle || (item && !item.startsWith('http') ? item : 'this link')
+    displayItem = `"${label}" (${linkUrl})`
+  }
+  let msg = `📌 Bookmarked — ${displayItem}`
+  if (context && !linkUrl) msg += ` (${context})`
   if (linked.length > 0) {
     msg += `\n🔗 Related to your saved: ${linked[0].item}`
   }
@@ -82,9 +87,15 @@ function duplicateUpdated(item) {
  * @param {string} urgency — 'high'|'medium'|'low'
  * @param {Array} linked — related bookmarks found via entity tag overlap
  */
-function reminderConfirmed(task, remindAt, urgency, linked = []) {
+function reminderConfirmed(task, remindAt, urgency, linked = [], linkUrl = null, linkTitle = null) {
   const dateStr = formatDate(remindAt)
-  let msg = `⏰ Got it — I'll remind you to ${task} ${dateStr}`
+  let displayTask = task
+  if (linkUrl) {
+    const label = linkTitle || 'this'
+    const cleanTask = task.replace(/https?:\/\/[^\s]+/g, '').trim() || 'do this'
+    displayTask = `${cleanTask} — "${label}" (${linkUrl})`
+  }
+  let msg = `⏰ Got it — I'll remind you to ${displayTask} ${dateStr}`
   if (urgency === 'high') msg += ' — flagged as urgent'
   if (linked.length > 0) {
     msg += `\n🔗 You saved a ${linked[0].item} for that`

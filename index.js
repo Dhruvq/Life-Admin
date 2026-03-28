@@ -10,6 +10,7 @@ require('dotenv').config()
 const { IMessageSDK } = require('@photon-ai/imessage-kit')
 const { transcribe } = require('./transcriber')
 const { classify } = require('./classifier')
+const { fetchLinkTitle } = require('./fetcher')
 const { startScheduler } = require('./scheduler')
 const db = require('./db')
 const r = require('./responses')
@@ -69,6 +70,15 @@ function flushBuffer(sender, sdk) {
     attachments: buf.audioAttachment ? [buf.audioAttachment] : [],
   }
   handleMessage(synthetic, sdk)
+}
+
+// ── URL helpers ───────────────────────────────────────────────────────────────
+
+function extractFirstURL(text) {
+  const match = text.match(/https?:\/\/[^\s]+/)
+  if (!match) return null
+  // Strip trailing punctuation that isn't part of the URL
+  return match[0].replace(/[.,!?;:)'">]+$/, '')
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -140,8 +150,8 @@ async function handleMessage(msg, sdk) {
 
     // ── 5. Route ─────────────────────────────────────────────────────────────
     switch (intent.intent) {
-      case 'bookmark':      await bookmarkFlow(intent, send, sender); break
-      case 'reminder':      await reminderFlow(intent, send, sender); break
+      case 'bookmark':      await bookmarkFlow(intent, send, sender, text); break
+      case 'reminder':      await reminderFlow(intent, send, sender, text); break
       case 'query':         await queryFlow(intent, send, sender); break
       case 'list_all':      await listAllFlow(send, sender); break
       case 'delete':        await deleteFlow(intent, send, sender); break
@@ -158,13 +168,18 @@ async function handleMessage(msg, sdk) {
 
 // ── Intent flows ──────────────────────────────────────────────────────────────
 
-async function bookmarkFlow(intent, send, sender) {
+async function bookmarkFlow(intent, send, sender, text = '') {
   const { item, context, entity_tags = [] } = intent
 
   if (!item) {
     await send(r.unknownIntent())
     return
   }
+
+  // Fetch link title if a URL is present in the original message
+  const linkUrl = extractFirstURL(text)
+  const linkTitle = linkUrl ? await fetchLinkTitle(linkUrl) : null
+  if (linkUrl) console.log(`[index] Link title for ${linkUrl}: "${linkTitle}"`)
 
   // Check for duplicate: same item text (case-insensitive) or overlapping tags
   const tagMatches = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags, sender) : []
@@ -182,12 +197,14 @@ async function bookmarkFlow(intent, send, sender) {
       newItem: item,
       newContext: context || null,
       newTags: entity_tags,
+      newLinkUrl: linkUrl,
+      newLinkTitle: linkTitle,
     }, sender)
     await send(r.duplicateFound(duplicate.item))
     return
   }
 
-  const id = db.addBookmark({ sender, item, context, tags: entity_tags })
+  const id = db.addBookmark({ sender, item, context, tags: entity_tags, link_url: linkUrl, link_title: linkTitle })
   console.log(`[index] Bookmark #${id} added for ${sender}: "${item}"`)
 
   // Smart linking: find related bookmarks by tag (exclude the one we just saved)
@@ -195,10 +212,10 @@ async function bookmarkFlow(intent, send, sender) {
     ? db.searchByEntityTags(entity_tags, sender).filter((b) => b.id !== id)
     : []
 
-  await send(r.bookmarkConfirmed(item, context, linked))
+  await send(r.bookmarkConfirmed(item, context, linked, linkUrl, linkTitle))
 }
 
-async function reminderFlow(intent, send, sender = '') {
+async function reminderFlow(intent, send, sender = '', text = '') {
   const { task, remind_at, urgency = 'low', entity_tags = [] } = intent
 
   // Vague reminder — no task provided
@@ -215,16 +232,21 @@ async function reminderFlow(intent, send, sender = '') {
     return
   }
 
+  // Fetch link title if a URL is present in the original message
+  const linkUrl = extractFirstURL(text)
+  const linkTitle = linkUrl ? await fetchLinkTitle(linkUrl) : null
+  if (linkUrl) console.log(`[index] Link title for ${linkUrl}: "${linkTitle}"`)
+
   // Compute remind_at if not set (urgency defaults)
   const finalRemindAt = remind_at || _urgencyDefault(urgency)
 
-  const id = db.addReminder({ sender, task, remind_at: finalRemindAt, urgency, entity_tags })
+  const id = db.addReminder({ sender, task, remind_at: finalRemindAt, urgency, entity_tags, link_url: linkUrl, link_title: linkTitle })
   console.log(`[index] Reminder #${id} added for ${sender}: "${task}" at ${finalRemindAt}`)
 
   // Smart linking
   const linked = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags, sender) : []
 
-  await send(r.reminderConfirmed(task, finalRemindAt, urgency, linked))
+  await send(r.reminderConfirmed(task, finalRemindAt, urgency, linked, linkUrl, linkTitle))
 }
 
 async function queryFlow(intent, send, sender) {
@@ -324,6 +346,8 @@ async function handleDisambiguation(text, pending, sdk, sender) {
           item: pending.newItem,
           context: pending.newContext,
           tags: pending.newTags,
+          link_url: pending.newLinkUrl || null,
+          link_title: pending.newLinkTitle || null,
         })
         db.clearPendingAction(sender)
         await send(r.duplicateUpdated(pending.newItem))
@@ -333,10 +357,12 @@ async function handleDisambiguation(text, pending, sdk, sender) {
           item: pending.newItem,
           context: pending.newContext,
           tags: pending.newTags,
+          link_url: pending.newLinkUrl || null,
+          link_title: pending.newLinkTitle || null,
         })
         console.log(`[index] New bookmark #${id} saved despite duplicate: "${pending.newItem}"`)
         db.clearPendingAction(sender)
-        await send(r.bookmarkConfirmed(pending.newItem, pending.newContext))
+        await send(r.bookmarkConfirmed(pending.newItem, pending.newContext, [], pending.newLinkUrl || null, pending.newLinkTitle || null))
       } else {
         await send(r.duplicateFound(pending.existingItem))
       }
@@ -347,7 +373,7 @@ async function handleDisambiguation(text, pending, sdk, sender) {
       const clarified = await classify(`Remind me to ${text}`)
       db.clearPendingAction(sender)
       if (clarified.intent === 'reminder' && clarified.task && clarified.task.length >= 5) {
-        await reminderFlow(clarified, send, sender)
+        await reminderFlow(clarified, send, sender, text)
       } else {
         await send(r.unknownIntent())
       }

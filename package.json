@@ -9,7 +9,8 @@
     "validate:2": "node validate/02-photon-voice-memo.js",
     "validate:3": "node validate/03-minimax-stt.js",
     "validate:4": "node validate/04-minimax-classification.js",
-    "validate:5": "node validate/05-timezone.js"
+    "validate:5": "node validate/05-timezone.js",
+    "web": "node server.js"
   },
   "repository": {
     "type": "git",
@@ -27,6 +28,7 @@
     "@photon-ai/imessage-kit": "^2.1.2",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^17.3.1",
+    "express": "^5.2.1",
     "openai": "^6.33.0"
   }
 }

@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carl — Life Admin Agent</title>
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sage:       #7A9E7E;
+      --sage-dark:  #5C7E60;
+      --sage-light: #EAF2EA;
+      --sage-mid:   #C4D9C6;
+      --white:      #FFFFFF;
+      --bg:         #F4F8F4;
+      --text:       #2C3E2D;
+      --muted:      #7A9285;
+      --border:     #D0E2D0;
+      --danger:     #C0392B;
+      --danger-bg:  #FDECEA;
+      --orange:     #E67E22;
+      --red:        #E74C3C;
+      --radius:     12px;
+      --shadow:     0 2px 8px rgba(60, 100, 60, 0.10);
+      --shadow-lg:  0 4px 20px rgba(60, 100, 60, 0.13);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────────────── */
+    header {
+      background: var(--sage);
+      color: var(--white);
+      padding: 20px 32px;
+      text-align: center;
+      box-shadow: 0 2px 12px rgba(60,100,60,0.18);
+    }
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    header p {
+      font-size: 13px;
+      opacity: 0.8;
+      margin-top: 2px;
+    }
+
+    /* ── Phone bar ─────────────────────────────────────────────────────────── */
+    .phone-bar {
+      background: var(--white);
+      border-bottom: 1.5px solid var(--border);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .phone-bar label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .phone-bar input[type="tel"] {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      width: 220px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .phone-bar input[type="tel"]:focus {
+      border-color: var(--sage);
+      background: var(--white);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: var(--sage);
+      color: var(--white);
+    }
+    .btn-primary:hover { background: var(--sage-dark); }
+    .btn-outline {
+      background: var(--white);
+      color: var(--sage-dark);
+      border: 1.5px solid var(--sage);
+    }
+    .btn-outline:hover { background: var(--sage-light); }
+    .btn-danger {
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1.5px solid #f5c6c2;
+    }
+    .btn-danger:hover { background: #fad5d2; }
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    /* ── Toast ─────────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--text);
+      color: var(--white);
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    #toast.success { background: var(--sage-dark); }
+    #toast.error   { background: var(--danger); }
+
+    /* ── Main layout ───────────────────────────────────────────────────────── */
+    main {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 24px;
+    }
+
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    /* ── Column panel ──────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--white);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .panel-header {
+      background: var(--sage-light);
+      border-bottom: 1.5px solid var(--border);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-header h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--sage-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-header .count {
+      background: var(--sage);
+      color: var(--white);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 2px 9px;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    /* ── Empty state ───────────────────────────────────────────────────────── */
+    .empty-state {
+      padding: 36px 18px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .empty-state .empty-icon { font-size: 32px; margin-bottom: 8px; }
+
+    /* ── Card ──────────────────────────────────────────────────────────────── */
+    .card-list { padding: 10px 12px 4px; }
+    .card {
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: var(--white);
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover { box-shadow: var(--shadow); }
+    .card.expanded { box-shadow: var(--shadow-lg); border-color: var(--sage-mid); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .card-icon { font-size: 16px; flex-shrink: 0; }
+    .card-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      flex-shrink: 0;
+    }
+    .badge-high   { background: #FDECEA; color: var(--red); }
+    .badge-medium { background: #FEF3E2; color: var(--orange); }
+    .badge-low    { background: var(--sage-light); color: var(--sage-dark); }
+
+    .card-chevron {
+      font-size: 11px;
+      color: var(--muted);
+      flex-shrink: 0;
+      transition: transform 0.25s;
+    }
+    .card-link {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--sage-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-decoration: none;
+    }
+    .card-link:hover { text-decoration: underline; }
+    .card.expanded .card-chevron { transform: rotate(180deg); }
+
+    .card-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+      padding: 0 14px;
+    }
+    .card.expanded .card-body {
+      max-height: 200px;
+      padding: 0 14px 12px;
+    }
+    .card-detail {
+      font-size: 13px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+    .card-detail strong { color: var(--text); font-weight: 600; }
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    /* ── Add form ──────────────────────────────────────────────────────────── */
+    .add-section { padding: 8px 12px 12px; border-top: 1.5px dashed var(--border); }
+    .add-toggle-btn {
+      width: 100%;
+      padding: 9px;
+      background: var(--sage-light);
+      color: var(--sage-dark);
+      border: 1.5px dashed var(--sage-mid);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-align: center;
+    }
+    .add-toggle-btn:hover { background: var(--sage-mid); }
+
+    .add-form {
+      display: none;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 10px;
+    }
+    .add-form.open { display: flex; }
+    .add-form input,
+    .add-form select,
+    .add-form textarea {
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 11px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+    .add-form input:focus,
+    .add-form select:focus { border-color: var(--sage); background: var(--white); }
+    .add-form label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .field { display: flex; flex-direction: column; gap: 3px; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ── Footer ────────────────────────────────────────────────────────────── */
+    .footer {
+      margin-top: 28px;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* ── Placeholder ───────────────────────────────────────────────────────── */
+    .placeholder-msg {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--muted);
+    }
+    .placeholder-msg .ph-icon { font-size: 48px; margin-bottom: 12px; }
+    .placeholder-msg p { font-size: 16px; font-weight: 500; }
+    .placeholder-msg small { font-size: 13px; opacity: 0.7; }
+
+    @media (max-width: 700px) {
+      .columns { grid-template-columns: 1fr; }
+      .phone-bar { padding: 14px 16px; }
+      main { margin: 16px auto; padding: 0 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <h1>Your Life Admin Agent: Carl</h1>
+  <p>Bookmarks &amp; reminders — all in one place</p>
+</header>
+
+<!-- ── Phone bar ───────────────────────────────────────────────────────────── -->
+<div class="phone-bar">
+  <label for="phoneInput">Phone Number</label>
+  <input type="tel" id="phoneInput" placeholder="+16501234567" autocomplete="tel" />
+  <button class="btn btn-primary" onclick="loadData()">Load</button>
+  <button class="btn btn-outline" onclick="sendOnboard()">Send Onboard Message</button>
+</div>
+
+<!-- ── Toast ───────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── Main ────────────────────────────────────────────────────────────────── -->
+<main>
+  <!-- Placeholder shown before a phone number is loaded -->
+  <div id="placeholder" class="placeholder-msg">
+    <div class="ph-icon">📱</div>
+    <p>Enter a phone number above and click Load</p>
+    <small>Bookmarks and reminders will appear here</small>
+  </div>
+
+  <!-- Two-column layout, hidden until data is loaded -->
+  <div id="dashboard" style="display:none;">
+    <div class="columns">
+      <!-- Bookmarks column -->
+      <div class="panel" id="bookmarksPanel">
+        <div class="panel-header">
+          <h2>📌 Bookmarks</h2>
+          <span class="count" id="bCount">0</span>
+        </div>
+        <div id="bookmarksList" class="card-list"></div>
+        <!-- Add bookmark -->
+        <div class="add-section">
+          <button class="add-toggle-btn" onclick="toggleAddForm('bookmark')">+ Add Bookmark</button>
+          <div class="add-form" id="addBookmarkForm">
+            <div class="field">
+              <label>Item <span style="color:var(--red)">*</span></label>
+              <input type="text" id="bItem" placeholder="e.g. AirPods Max" />
+            </div>
+            <div class="field">
+              <label>Context <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+              <input type="text" id="bContext" placeholder="e.g. Gift for Dad" />
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-sm btn-outline" onclick="toggleAddForm('bookmark')">Cancel</button>
+              <button class="btn btn-sm btn-primary" onclick="saveBookmark()">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reminders column -->
+      <div class="panel" id="remindersPanel">
+        <div class="panel-header">
+          <h2>⏰ Reminders</h2>
+          <span class="count" id="rCount">0</span>
+        </div>
+        <div id="remindersList" class="card-list"></div>
+        <!-- Add reminder -->
+        <div class="add-section">
+          <button class="add-toggle-btn" onclick="toggleAddForm('reminder')">+ Add Reminder</button>
+          <div class="add-form" id="addReminderForm">
+            <div class="field">
+              <label>Task <span style="color:var(--red)">*</span></label>
+              <input type="text" id="rTask" placeholder="e.g. Cancel Netflix trial" />
+            </div>
+            <div class="field">
+              <label>Remind At <span style="color:var(--red)">*</span></label>
+              <input type="datetime-local" id="rDate" />
+            </div>
+            <div class="field">
+              <label>Urgency</label>
+              <select id="rUrgency">
+                <option value="low">Low — next morning</option>
+                <option value="medium">Medium — this evening</option>
+                <option value="high">High — ASAP</option>
+              </select>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-sm btn-outline" onclick="toggleAddForm('reminder')">Cancel</button>
+              <button class="btn btn-sm btn-primary" onclick="saveReminder()">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <button class="btn btn-danger" onclick="clearAll()">🗑 Clear All Data</button>
+    </div>
+  </div>
+</main>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let currentPhone = ''
+  let lastBookmarks = null   // JSON snapshot for change detection
+  let lastReminders = null
+  let pollTimer = null
+  const POLL_MS = 5000
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function phone() {
+    return document.getElementById('phoneInput').value.trim()
+  }
+
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast')
+    t.textContent = msg
+    t.className = `show ${type}`
+    clearTimeout(t._timer)
+    t._timer = setTimeout(() => { t.className = '' }, 3000)
+  }
+
+  function formatDate(isoString) {
+    const target = new Date(isoString)
+    const now = new Date()
+    const diffMs = target - now
+    const diffMins = Math.round(diffMs / 60000)
+    const diffHours = Math.round(diffMs / 3600000)
+    const diffDays = Math.round(diffMs / 86400000)
+
+    const timeStr = target.toLocaleString('en-US', {
+      hour: 'numeric',
+      minute: target.getMinutes() !== 0 ? '2-digit' : undefined,
+      hour12: true,
+    }).toLowerCase()
+
+    if (diffMins <= 2) return 'right now'
+    if (diffMins < 60) return `in ${diffMins} min`
+    if (diffHours < 6) return `in ~${diffHours}h`
+
+    const todayStr = now.toDateString()
+    const tomorrowStr = new Date(now.getTime() + 86400000).toDateString()
+    const targetStr = target.toDateString()
+
+    if (targetStr === todayStr) return `today at ${timeStr}`
+    if (targetStr === tomorrowStr) return `tomorrow at ${timeStr}`
+    if (diffDays < 7) return `in ${diffDays} days at ${timeStr}`
+
+    const dateStr = target.toLocaleString('en-US', { month: 'short', day: 'numeric' })
+    return `${dateStr} at ${timeStr}`
+  }
+
+  function relativeAge(isoString) {
+    const d = Math.floor((Date.now() - new Date(isoString)) / 86400000)
+    if (d === 0) return 'today'
+    if (d === 1) return 'yesterday'
+    if (d < 7) return `${d} days ago`
+    return `${Math.floor(d / 7)} weeks ago`
+  }
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  // ── Load data ──────────────────────────────────────────────────────────────
+
+  async function loadData() {
+    const p = phone()
+    if (!p) { showToast('Enter a phone number first', 'error'); return }
+
+    // If switching phones, reset state and stop existing poll
+    if (p !== currentPhone) {
+      currentPhone = p
+      lastBookmarks = null
+      lastReminders = null
+      if (pollTimer) clearInterval(pollTimer)
+      pollTimer = setInterval(pollData, POLL_MS)
+    }
+
+    await fetchAndRender(true)
+  }
+
+  // Silent background poll — only re-renders sections that changed
+  async function pollData() {
+    if (!currentPhone) return
+    await fetchAndRender(false)
+  }
+
+  async function fetchAndRender(showErrors) {
+    try {
+      const res = await fetch(`/api/data?phone=${encodeURIComponent(currentPhone)}`)
+      if (!res.ok) throw new Error(await res.text())
+      const { bookmarks, reminders } = await res.json()
+
+      const bSnap = JSON.stringify(bookmarks)
+      const rSnap = JSON.stringify(reminders)
+
+      if (bSnap !== lastBookmarks) { renderBookmarks(bookmarks); lastBookmarks = bSnap }
+      if (rSnap !== lastReminders) { renderReminders(reminders); lastReminders = rSnap }
+
+      document.getElementById('placeholder').style.display = 'none'
+      document.getElementById('dashboard').style.display = 'block'
+    } catch (err) {
+      if (showErrors) showToast('Failed to load data: ' + err.message, 'error')
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  function renderBookmarks(bookmarks) {
+    document.getElementById('bCount').textContent = bookmarks.length
+    const list = document.getElementById('bookmarksList')
+
+    if (bookmarks.length === 0) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>No bookmarks yet</div>'
+      return
+    }
+
+    list.innerHTML = bookmarks.map(b => {
+      const ctx = b.context ? `<strong>Context:</strong> ${esc(b.context)}<br>` : ''
+      const titleEl = b.link_url
+        ? `<a class="card-link" href="${esc(b.link_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(b.link_title || b.item)}</a>`
+        : `<span class="card-title">${esc(b.item)}</span>`
+      return `
+        <div class="card" id="card-b-${b.id}">
+          <div class="card-header" onclick="toggleCard('b', ${b.id})">
+            <span class="card-icon">📌</span>
+            ${titleEl}
+            <span class="card-chevron">▾</span>
+          </div>
+          <div class="card-body">
+            <div class="card-detail">
+              ${ctx}
+              ${b.link_url ? `<a href="${esc(b.link_url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--sage-dark);word-break:break-all;display:block;margin-bottom:4px;">${esc(b.link_url)}</a>` : ''}
+              <span style="color:var(--muted);font-size:12px">Saved ${esc(relativeAge(b.created_at))}</span>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-sm btn-danger" onclick="deleteBookmark(${b.id})">Delete</button>
+            </div>
+          </div>
+        </div>`
+    }).join('')
+  }
+
+  function renderReminders(reminders) {
+    document.getElementById('rCount').textContent = reminders.length
+    const list = document.getElementById('remindersList')
+
+    if (reminders.length === 0) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div>No reminders yet</div>'
+      return
+    }
+
+    list.innerHTML = reminders.map(r => {
+      const urgency = r.urgency || 'low'
+      const badgeClass = urgency === 'high' ? 'badge-high' : urgency === 'medium' ? 'badge-medium' : 'badge-low'
+      const timeStr = formatDate(r.remind_at)
+      const titleEl = r.link_url
+        ? `<a class="card-link" href="${esc(r.link_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(r.link_title || r.task)}</a>`
+        : `<span class="card-title">${esc(r.task)}</span>`
+      return `
+        <div class="card" id="card-r-${r.id}">
+          <div class="card-header" onclick="toggleCard('r', ${r.id})">
+            <span class="card-icon">⏰</span>
+            ${titleEl}
+            <span class="card-badge ${badgeClass}">${urgency}</span>
+            <span class="card-chevron">▾</span>
+          </div>
+          <div class="card-body">
+            <div class="card-detail">
+              <strong>When:</strong> ${esc(timeStr)}<br>
+              ${r.link_url ? `<a href="${esc(r.link_url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--sage-dark);word-break:break-all;display:block;margin-bottom:4px;">${esc(r.link_url)}</a>` : ''}
+              <span style="color:var(--muted);font-size:12px">Added ${esc(relativeAge(r.created_at))}</span>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-sm btn-danger" onclick="deleteReminder(${r.id})">Delete</button>
+            </div>
+          </div>
+        </div>`
+    }).join('')
+  }
+
+  // ── Card expand/collapse ───────────────────────────────────────────────────
+
+  function toggleCard(type, id) {
+    const card = document.getElementById(`card-${type}-${id}`)
+    card.classList.toggle('expanded')
+  }
+
+  // ── Add forms ──────────────────────────────────────────────────────────────
+
+  function toggleAddForm(type) {
+    const form = document.getElementById(type === 'bookmark' ? 'addBookmarkForm' : 'addReminderForm')
+    form.classList.toggle('open')
+    // Pre-fill datetime-local with current time + 1 day
+    if (type === 'reminder' && form.classList.contains('open')) {
+      const d = new Date(Date.now() + 86400000)
+      d.setHours(8, 0, 0, 0)
+      document.getElementById('rDate').value = d.toISOString().slice(0, 16)
+    }
+  }
+
+  async function saveBookmark() {
+    if (!currentPhone) { showToast('Load a phone number first', 'error'); return }
+    const item = document.getElementById('bItem').value.trim()
+    const context = document.getElementById('bContext').value.trim()
+    if (!item) { showToast('Item is required', 'error'); return }
+
+    try {
+      const res = await fetch('/api/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: currentPhone, item, context: context || null }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      document.getElementById('bItem').value = ''
+      document.getElementById('bContext').value = ''
+      document.getElementById('addBookmarkForm').classList.remove('open')
+      showToast(`📌 Bookmarked — ${item}`)
+      loadData()
+    } catch (err) {
+      showToast('Failed to save: ' + err.message, 'error')
+    }
+  }
+
+  async function saveReminder() {
+    if (!currentPhone) { showToast('Load a phone number first', 'error'); return }
+    const task = document.getElementById('rTask').value.trim()
+    const dateVal = document.getElementById('rDate').value
+    const urgency = document.getElementById('rUrgency').value
+    if (!task) { showToast('Task is required', 'error'); return }
+    if (!dateVal) { showToast('Remind at date is required', 'error'); return }
+
+    const remind_at = new Date(dateVal).toISOString()
+
+    try {
+      const res = await fetch('/api/reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: currentPhone, task, remind_at, urgency }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      document.getElementById('rTask').value = ''
+      document.getElementById('addReminderForm').classList.remove('open')
+      showToast(`⏰ Reminder set — ${task}`)
+      loadData()
+    } catch (err) {
+      showToast('Failed to save: ' + err.message, 'error')
+    }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+
+  async function deleteBookmark(id) {
+    try {
+      await fetch(`/api/bookmarks/${id}`, { method: 'DELETE' })
+      showToast('Bookmark removed')
+      loadData()
+    } catch (err) {
+      showToast('Failed to delete', 'error')
+    }
+  }
+
+  async function deleteReminder(id) {
+    try {
+      await fetch(`/api/reminders/${id}`, { method: 'DELETE' })
+      showToast('Reminder cancelled')
+      loadData()
+    } catch (err) {
+      showToast('Failed to delete', 'error')
+    }
+  }
+
+  // ── Clear all ──────────────────────────────────────────────────────────────
+
+  async function clearAll() {
+    if (!currentPhone) { showToast('Load a phone number first', 'error'); return }
+    if (!confirm('Delete all bookmarks and reminders for this number? This cannot be undone.')) return
+    try {
+      const res = await fetch('/api/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: currentPhone, target: 'all' }),
+      })
+      const { bookmarks, reminders } = await res.json()
+      showToast(`Cleared ${bookmarks} bookmark(s) and ${reminders} reminder(s)`)
+      loadData()
+    } catch (err) {
+      showToast('Failed to clear', 'error')
+    }
+  }
+
+  // ── Onboard ────────────────────────────────────────────────────────────────
+
+  async function sendOnboard() {
+    const p = phone()
+    if (!p) { showToast('Enter a phone number first', 'error'); return }
+    try {
+      const res = await fetch('/api/onboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: p }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error)
+      }
+      showToast('Onboard message sent to ' + p)
+    } catch (err) {
+      showToast('Failed to send: ' + err.message, 'error')
+    }
+  }
+
+  // ── Enter key support ──────────────────────────────────────────────────────
+
+  document.getElementById('phoneInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadData()
+  })
+</script>
+</body>
+</html>
