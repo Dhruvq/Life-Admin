@@ -84,7 +84,7 @@ function duplicateUpdated(item) {
 /**
  * @param {string} task
  * @param {string} remindAt — UTC ISO string
- * @param {string} urgency — 'high'|'medium'|'low'
+ * @param {string} urgency — 'scheduled'|'high'|'medium'|'low'
  * @param {Array} linked — related bookmarks found via entity tag overlap
  */
 function reminderConfirmed(task, remindAt, urgency, linked = [], linkUrl = null, linkTitle = null) {

@@ -242,9 +242,10 @@
       border-radius: 20px;
       flex-shrink: 0;
     }
-    .badge-high   { background: #FDECEA; color: var(--red); }
-    .badge-medium { background: #FEF3E2; color: var(--orange); }
-    .badge-low    { background: var(--sage-light); color: var(--sage-dark); }
+    .badge-scheduled { background: #EAF0FB; color: #2D6BC4; }
+    .badge-high      { background: #FDECEA; color: var(--red); }
+    .badge-medium    { background: #FEF3E2; color: var(--orange); }
+    .badge-low       { background: var(--sage-light); color: var(--sage-dark); }
 
     .card-chevron {
       font-size: 11px;
@@ -441,11 +442,12 @@
               <input type="datetime-local" id="rDate" />
             </div>
             <div class="field">
-              <label>Urgency</label>
-              <select id="rUrgency">
-                <option value="low">Low — next morning</option>
-                <option value="medium">Medium — this evening</option>
+              <label>Urgency <span style="color:var(--muted);font-weight:400">(auto-set to Scheduled when a time is picked)</span></label>
+              <select id="rUrgency" disabled style="opacity:0.5">
+                <option value="scheduled">Scheduled</option>
                 <option value="high">High — ASAP</option>
+                <option value="medium">Medium — this evening</option>
+                <option value="low">Low — next morning</option>
               </select>
             </div>
             <div class="form-actions">
@@ -623,7 +625,7 @@
 
     list.innerHTML = reminders.map(r => {
       const urgency = r.urgency || 'low'
-      const badgeClass = urgency === 'high' ? 'badge-high' : urgency === 'medium' ? 'badge-medium' : 'badge-low'
+      const badgeClass = urgency === 'scheduled' ? 'badge-scheduled' : urgency === 'high' ? 'badge-high' : urgency === 'medium' ? 'badge-medium' : 'badge-low'
       const timeStr = formatDate(r.remind_at)
       const titleEl = r.link_url
         ? `<a class="card-link" href="${esc(r.link_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(r.link_title || r.task)}</a>`
@@ -659,14 +661,23 @@
 
   // ── Add forms ──────────────────────────────────────────────────────────────
 
+  function minDateTime() {
+    // now + 1 minute, rounded to the minute
+    const d = new Date(Date.now() + 60000)
+    d.setSeconds(0, 0)
+    return d.toISOString().slice(0, 16)
+  }
+
   function toggleAddForm(type) {
     const form = document.getElementById(type === 'bookmark' ? 'addBookmarkForm' : 'addReminderForm')
     form.classList.toggle('open')
-    // Pre-fill datetime-local with current time + 1 day
     if (type === 'reminder' && form.classList.contains('open')) {
+      const input = document.getElementById('rDate')
+      // Default to tomorrow 8am
       const d = new Date(Date.now() + 86400000)
       d.setHours(8, 0, 0, 0)
-      document.getElementById('rDate').value = d.toISOString().slice(0, 16)
+      input.min = minDateTime()
+      input.value = d.toISOString().slice(0, 16)
     }
   }
 
@@ -702,6 +713,10 @@
     if (!dateVal) { showToast('Remind at date is required', 'error'); return }
 
     const remind_at = new Date(dateVal).toISOString()
+    if (new Date(remind_at) < new Date(Date.now() + 60000)) {
+      showToast('Reminder must be at least 1 minute in the future', 'error')
+      return
+    }
 
     try {
       const res = await fetch('/api/reminders', {

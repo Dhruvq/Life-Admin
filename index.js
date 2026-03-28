@@ -138,15 +138,26 @@ async function handleMessage(msg, sdk) {
       return
     }
 
-    // ── 3. Multi-turn disambiguation ─────────────────────────────────────────
-    const pending = db.getPendingAction(sender)
-    if (pending) {
-      await handleDisambiguation(text, pending, sdk, sender)
-      return
-    }
-
-    // ── 4. Classify intent ───────────────────────────────────────────────────
+    // ── 3. Classify intent ───────────────────────────────────────────────────
     const intent = await classify(text)
+
+    // ── 4. Multi-turn disambiguation ─────────────────────────────────────────
+    // Classify FIRST so a stale pending action can't hijack unrelated new messages.
+    // Only route to disambiguation if the new message looks like an answer to a
+    // pending question (conversational). A clear new action always wins.
+    const pending = db.getPendingAction(sender)
+    const ACTION_INTENTS = ['bookmark', 'reminder', 'query', 'list_all', 'delete', 'clear_all']
+    if (pending) {
+      if (ACTION_INTENTS.includes(intent.intent)) {
+        // User sent a new request — abandon the stale pending state
+        console.log(`[index] Clearing stale pending (${pending.type}) — new intent: ${intent.intent}`)
+        db.clearPendingAction(sender)
+        // Fall through to routing below
+      } else {
+        await handleDisambiguation(text, pending, sdk, sender)
+        return
+      }
+    }
 
     // ── 5. Route ─────────────────────────────────────────────────────────────
     switch (intent.intent) {
@@ -207,16 +218,21 @@ async function bookmarkFlow(intent, send, sender, text = '') {
   const id = db.addBookmark({ sender, item, context, tags: entity_tags, link_url: linkUrl, link_title: linkTitle })
   console.log(`[index] Bookmark #${id} added for ${sender}: "${item}"`)
 
-  // Smart linking: find related bookmarks by tag (exclude the one we just saved)
-  const linked = entity_tags.length > 0
-    ? db.searchByEntityTags(entity_tags, sender).filter((b) => b.id !== id)
+  // Smart linking: only surface a related bookmark if ≥2 tags overlap (strict match)
+  const linked = entity_tags.length >= 2
+    ? db.searchByEntityTags(entity_tags, sender)
+        .filter((b) => b.id !== id)
+        .filter((b) => _tagOverlapCount(entity_tags, b.tags) >= 2)
     : []
 
   await send(r.bookmarkConfirmed(item, context, linked, linkUrl, linkTitle))
 }
 
 async function reminderFlow(intent, send, sender = '', text = '') {
-  const { task, remind_at, urgency = 'low', entity_tags = [] } = intent
+  const { task, entity_tags = [] } = intent
+  const remind_at = intent.remind_at || null
+  // If user gave an explicit time, urgency is always 'scheduled' regardless of classifier output
+  const urgency = remind_at ? 'scheduled' : (intent.urgency || 'low')
 
   // Vague reminder — no task provided
   if (!task || task.trim().length < 5) {
@@ -243,8 +259,11 @@ async function reminderFlow(intent, send, sender = '', text = '') {
   const id = db.addReminder({ sender, task, remind_at: finalRemindAt, urgency, entity_tags, link_url: linkUrl, link_title: linkTitle })
   console.log(`[index] Reminder #${id} added for ${sender}: "${task}" at ${finalRemindAt}`)
 
-  // Smart linking
-  const linked = entity_tags.length > 0 ? db.searchByEntityTags(entity_tags, sender) : []
+  // Smart linking: only surface a related bookmark if ≥2 tags overlap (strict match)
+  const linked = entity_tags.length >= 2
+    ? db.searchByEntityTags(entity_tags, sender)
+        .filter((b) => _tagOverlapCount(entity_tags, b.tags) >= 2)
+    : []
 
   await send(r.reminderConfirmed(task, finalRemindAt, urgency, linked, linkUrl, linkTitle))
 }
@@ -416,6 +435,13 @@ function _deleteItem(match) {
   } else {
     db.deleteBookmark(match.id)
   }
+}
+
+function _tagOverlapCount(newTags, storedTagsJson) {
+  try {
+    const stored = JSON.parse(storedTagsJson)
+    return newTags.filter((t) => stored.includes(t)).length
+  } catch { return 0 }
 }
 
 function _dedup(arr) {

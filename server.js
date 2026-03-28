@@ -51,11 +51,15 @@ app.delete('/api/bookmarks/:id', (req, res) => {
 
 // POST /api/reminders  { phone, task, remind_at (ISO), urgency }
 app.post('/api/reminders', (req, res) => {
-  const { phone, task, remind_at, urgency = 'low' } = req.body
+  const { phone, task, remind_at } = req.body
   if (!phone || !task || !remind_at) {
     return res.status(400).json({ error: 'phone, task, and remind_at required' })
   }
-  const id = db.addReminder({ sender: phone, task, remind_at, urgency, entity_tags: [] })
+  if (new Date(remind_at) < new Date(Date.now() + 60000)) {
+    return res.status(400).json({ error: 'remind_at must be at least 1 minute in the future' })
+  }
+  // Web dashboard always provides an exact time via the datetime picker → scheduled
+  const id = db.addReminder({ sender: phone, task, remind_at, urgency: 'scheduled', entity_tags: [] })
   res.json({ id })
 })
 
