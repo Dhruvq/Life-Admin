@@ -165,6 +165,14 @@ function cancelReminder(id) {
   db.prepare("UPDATE reminders SET status = 'cancelled' WHERE id = ?").run(id)
 }
 
+function deleteAllBookmarks(sender) {
+  return db.prepare('DELETE FROM bookmarks WHERE sender = ?').run(sender).changes
+}
+
+function deleteAllReminders(sender) {
+  return db.prepare("UPDATE reminders SET status = 'cancelled' WHERE sender = ? AND status = 'pending'").run(sender).changes
+}
+
 function searchReminders(query, sender) {
   const pattern = `%${query}%`
   return db.prepare(
@@ -198,12 +206,14 @@ module.exports = {
   getBookmarkById,
   updateBookmark,
   deleteBookmark,
+  deleteAllBookmarks,
   searchBookmarks,
   searchByEntityTags,
   addReminder,
   getPendingReminders,
   markReminderSent,
   cancelReminder,
+  deleteAllReminders,
   searchReminders,
   listAll,
 }
