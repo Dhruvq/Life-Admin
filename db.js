@@ -41,6 +41,7 @@ db.exec(`
     urgency     TEXT NOT NULL DEFAULT 'low', -- 'high' | 'medium' | 'low'
     status      TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'sent' | 'cancelled'
     entity_tags TEXT NOT NULL DEFAULT '[]', -- JSON array of strings (for smart linking)
+    sender      TEXT NOT NULL DEFAULT '',  -- phone number of person who set the reminder
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
@@ -50,6 +51,13 @@ db.exec(`
     value TEXT NOT NULL
   );
 `)
+
+// Migrate: add sender column to reminders if it doesn't exist yet
+try {
+  db.exec("ALTER TABLE reminders ADD COLUMN sender TEXT NOT NULL DEFAULT ''")
+} catch {
+  // Column already exists — ignore
+}
 
 // Seed onboarded = false if not set
 const onboardedRow = db.prepare("SELECT value FROM settings WHERE key = 'onboarded'").get()
@@ -150,11 +158,11 @@ function searchByEntityTags(tags) {
 
 // ── Reminders ─────────────────────────────────────────────────────────────
 
-function addReminder({ task, remind_at, urgency = 'low', entity_tags = [] }) {
+function addReminder({ task, remind_at, urgency = 'low', entity_tags = [], sender = '' }) {
   const stmt = db.prepare(
-    'INSERT INTO reminders (task, remind_at, urgency, entity_tags) VALUES (?, ?, ?, ?)'
+    'INSERT INTO reminders (task, remind_at, urgency, entity_tags, sender) VALUES (?, ?, ?, ?, ?)'
   )
-  const result = stmt.run(task, remind_at, urgency, JSON.stringify(entity_tags))
+  const result = stmt.run(task, remind_at, urgency, JSON.stringify(entity_tags), sender)
   return result.lastInsertRowid
 }
 
