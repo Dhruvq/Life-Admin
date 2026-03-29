@@ -5,9 +5,11 @@ Life Admin Agent is an intelligent iMessage bot that lives entirely inside your 
 
 ### Video Demo:
 
-<video src="https://media.githubusercontent.com/media/Dhruvq/Life-Admin/main/Carl_demo.mov" controls="controls" style="max-width: 100%;">
-  Your browser does not support the video tag.
-</video>
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=uN0rd4tAMwQ">
+    <img src="https://img.youtube.com/vi/uN0rd4tAMwQ/0.jpg" alt="Watch the Demo" style="max-width:100%;">
+  </a>
+</p>
 
 ##  Core Features
 
@@ -94,4 +96,4 @@ OPENAI_API_KEY=
 - `scheduler.js` — The 30-second polling loop for due reminders.
 - `responses.js` — Centralized response formatting and copy (Emoji System).
 
-##  MIT License
+###  MIT License
