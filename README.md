@@ -6,7 +6,7 @@ Life Admin Agent is an intelligent iMessage bot that lives entirely inside your 
 
 ### Video Demo:
 
-[Watch the Demo Video](./Carl_demo.mp4)
+[Watch the Demo Video](./Carl_demo.mov)
 
 ##  Core Features
 
