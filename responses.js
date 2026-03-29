@@ -138,13 +138,17 @@ function queryResults(bookmarks, reminders, query) {
 
   for (const b of bookmarks) {
     const age = _relativeAge(b.created_at)
+    const label = _itemLabel(b.item, b.link_url, b.link_title)
     const ctx = b.context ? ` — ${b.context}` : ''
-    lines.push(`📌 ${b.item}${ctx} (saved ${age})`)
+    lines.push(`📌 ${label}${ctx} (saved ${age})`)
+    if (b.link_url) lines.push(b.link_url)
   }
 
   for (const r of reminders) {
     const dateStr = formatDate(r.remind_at)
-    lines.push(`⏰ ${r.task} — ${dateStr}`)
+    const label = _itemLabel(r.task, r.link_url, r.link_title)
+    lines.push(`⏰ ${label} — ${dateStr}`)
+    if (r.link_url) lines.push(r.link_url)
   }
 
   return lines.join('\n')
@@ -163,8 +167,10 @@ function formatListAll(bookmarks, reminders) {
     lines.push('')
     for (const b of bookmarks) {
       const age = _relativeAge(b.created_at)
+      const label = _itemLabel(b.item, b.link_url, b.link_title)
       const ctx = b.context ? ` — ${b.context}` : ''
-      lines.push(`📌 ${b.item}${ctx} (saved ${age})`)
+      lines.push(`📌 ${label}${ctx} (saved ${age})`)
+      if (b.link_url) lines.push(b.link_url)
     }
   }
 
@@ -172,7 +178,9 @@ function formatListAll(bookmarks, reminders) {
     lines.push('')
     for (const r of reminders) {
       const dateStr = formatDate(r.remind_at)
-      lines.push(`⏰ ${r.task} — ${dateStr}`)
+      const label = _itemLabel(r.task, r.link_url, r.link_title)
+      lines.push(`⏰ ${label} — ${dateStr}`)
+      if (r.link_url) lines.push(r.link_url)
     }
   }
 
@@ -233,6 +241,16 @@ function conversational(reply) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Returns a clean display label for a bookmark/reminder item.
+// When a link is present: prefer link_title, else use item if it isn't a raw URL, else 'Link'.
+function _itemLabel(item, linkUrl, linkTitle) {
+  if (!linkUrl) return item
+  if (linkTitle) return linkTitle
+  // item is the raw URL itself — don't repeat it as the label
+  if (item && !item.startsWith('http')) return item
+  return 'Link'
+}
 
 function _relativeAge(isoString) {
   const created = new Date(isoString)

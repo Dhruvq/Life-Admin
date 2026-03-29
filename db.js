@@ -129,12 +129,16 @@ function deleteBookmark(id) {
 }
 
 function searchBookmarks(query, sender) {
-  const pattern = `%${query}%`
+  const words = query.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return []
+  // Each word must match at least one column (AND across words, OR across columns)
+  const conditions = words.map(() =>
+    `(item LIKE ? OR context LIKE ? OR tags LIKE ? OR COALESCE(link_title,'') LIKE ?)`
+  ).join(' AND ')
+  const params = [sender, ...words.flatMap(w => [`%${w}%`, `%${w}%`, `%${w}%`, `%${w}%`])]
   return db.prepare(
-    `SELECT * FROM bookmarks
-     WHERE sender = ? AND (item LIKE ? OR context LIKE ? OR tags LIKE ?)
-     ORDER BY created_at DESC`
-  ).all(sender, pattern, pattern, pattern)
+    `SELECT * FROM bookmarks WHERE sender = ? AND ${conditions} ORDER BY created_at DESC`
+  ).all(...params)
 }
 
 // Item 8: Search bookmarks by entity tag overlap, scoped to sender
@@ -182,12 +186,15 @@ function deleteAllReminders(sender) {
 }
 
 function searchReminders(query, sender) {
-  const pattern = `%${query}%`
+  const words = query.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return []
+  const conditions = words.map(() =>
+    `(task LIKE ? OR entity_tags LIKE ? OR COALESCE(link_title,'') LIKE ?)`
+  ).join(' AND ')
+  const params = [sender, ...words.flatMap(w => [`%${w}%`, `%${w}%`, `%${w}%`])]
   return db.prepare(
-    `SELECT * FROM reminders
-     WHERE sender = ? AND (task LIKE ? OR entity_tags LIKE ?) AND status = 'pending'
-     ORDER BY remind_at ASC`
-  ).all(sender, pattern, pattern)
+    `SELECT * FROM reminders WHERE sender = ? AND ${conditions} AND status = 'pending' ORDER BY remind_at ASC`
+  ).all(...params)
 }
 
 // ── List All (per-sender) ──────────────────────────────────────────────────
