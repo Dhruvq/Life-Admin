@@ -4,6 +4,10 @@
 
 Life Admin Agent is an intelligent iMessage bot that lives entirely inside your native messaging app. It bookmarks things you want to remember, reminds you about things you need to do, and seamlessly processes both text messages and native iMessage voice memos.
 
+### Video Demo:
+
+[Watch the Demo Video](./Carl_demo.mp4)
+
 ##  Core Features
 
 - **Six Core Intents**: Seamlessly detects whether you want to **Bookmark**, set a **Reminder**, **Query** saved items, **List All** active items, **Delete**, or just have a **Conversational** chat.
